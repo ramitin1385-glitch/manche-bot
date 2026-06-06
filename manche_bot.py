@@ -1,3 +1,4 @@
+cat > /mnt/user-data/outputs/manche_bot.py << 'ENDOFFILE'
 import random, logging, io
 from PIL import Image, ImageDraw
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -10,31 +11,31 @@ SIZE = 660
 CELL = SIZE // 11
 BG = (205, 170, 120)
 
-COLORS = {0: ("🔴","قرمز"), 1: ("🔵","آبی"), 2: ("🟢","سبز"), 3: ("🟡","زرد")}
+COLORS = {0:("🔴","قرمز"), 1:("🔵","آبی"), 2:("🟢","سبز"), 3:("🟡","زرد")}
 P_COLORS = {0:(220,50,50), 1:(50,80,200), 2:(50,180,50), 3:(180,160,50)}
 P_DARK   = {0:(140,30,30), 1:(30,50,140), 2:(30,120,30), 3:(120,100,30)}
+CORNER_FILLS = [(240,160,160),(160,180,240),(160,230,160),(230,220,160)]
 
 PATH = [
-    (4,10),(4,9),(4,8),(4,7),(4,6),
-    (3,6),(2,6),(1,6),(0,6),
-    (0,5),(0,4),(0,3),(0,2),(0,1),(0,0),
-    (1,0),(2,0),(3,0),(4,0),
-    (5,0),(5,1),(5,2),(5,3),(5,4),
-    (6,4),(7,4),(8,4),(9,4),(10,4),
-    (10,5),(10,6),(10,7),(10,8),(10,9),(10,10),
-    (9,10),(8,10),(7,10),(6,10),
-    (6,9),(6,8),(6,7),(6,6),
-    (6,5),(7,5),(8,5),(9,5),(10,5),
+    (0,6),(1,6),(2,6),(3,6),(4,6),
+    (5,6),(5,7),(5,8),(5,9),(5,10),
+    (6,10),(7,10),(8,10),(9,10),(10,10),
+    (10,9),(10,8),(10,7),(10,6),
+    (10,5),(9,5),(8,5),(7,5),(6,5),
+    (6,4),(6,3),(6,2),(6,1),(6,0),
+    (5,0),(4,0),(3,0),(2,0),(1,0),(0,0),
+    (0,1),(0,2),(0,3),(0,4),(0,5),
+    (1,5),(2,5),(3,5),(4,5),(5,5),
 ]
 
-START_IDX = {0:0, 1:13, 2:26, 3:39}
+START_POS = {0:1, 1:14, 2:27, 3:40}
 PARKING = {
-    0: [(1,8),(2,8),(1,9),(2,9)],
-    1: [(1,1),(2,1),(1,2),(2,2)],
-    2: [(8,1),(9,1),(8,2),(9,2)],
-    3: [(8,8),(9,8),(8,9),(9,9)],
+    0: [(1,7),(2,7),(1,8),(2,8)],
+    1: [(1,2),(2,2),(1,3),(2,3)],
+    2: [(8,2),(9,2),(8,3),(9,3)],
+    3: [(8,7),(9,7),(8,8),(9,8)],
 }
-SAFE = {0,8,13,21,26,34,39,47}
+SAFE = {0,13,26,39}
 games = {}
 
 
@@ -46,23 +47,31 @@ def draw_board(players=None, dice=0, msg=""):
     img = Image.new("RGB", (SIZE, SIZE+50), BG)
     draw = ImageDraw.Draw(img)
 
+    corners = [
+        (0,6*CELL,4*CELL,SIZE), (0,0,4*CELL,5*CELL),
+        (7*CELL,0,SIZE,5*CELL), (7*CELL,6*CELL,SIZE,SIZE)
+    ]
+    for i,(x1,y1,x2,y2) in enumerate(corners):
+        draw.rectangle([x1,y1,x2,y2], fill=CORNER_FILLS[i])
+
+    draw.rectangle([5*CELL,5*CELL,6*CELL,6*CELL], fill=(255,255,200))
+    draw.text((5*CELL+10,5*CELL+14), "WIN", fill=(150,100,0))
+
     for i in range(len(PATH)-1):
         c1,r1=PATH[i]; c2,r2=PATH[i+1]
-        draw.line([c1*CELL+CELL//2, r1*CELL+CELL//2, c2*CELL+CELL//2, r2*CELL+CELL//2], fill=(80,60,40), width=3)
+        draw.line([c1*CELL+CELL//2,r1*CELL+CELL//2,c2*CELL+CELL//2,r2*CELL+CELL//2], fill=(80,60,40), width=3)
 
     for i,(c,r) in enumerate(PATH):
-        cx,cy = c*CELL+CELL//2, r*CELL+CELL//2
+        cx,cy=c*CELL+CELL//2, r*CELL+CELL//2
         if i in SAFE:
-            ci = i//13 % 4
-            draw_circle(draw, cx, cy, CELL//2-4, P_COLORS[ci], (0,0,0), 3)
+            ci=list(SAFE).index(i)%4
+            draw_circle(draw, cx, cy, CELL//2-5, P_COLORS[ci], (0,0,0), 3)
         else:
-            draw_circle(draw, cx, cy, CELL//2-4, (255,255,255), (0,0,0), 2)
+            draw_circle(draw, cx, cy, CELL//2-5, (255,255,255), (0,0,0), 2)
 
     for color, positions in PARKING.items():
         for c,r in positions:
-            draw_circle(draw, c*CELL+CELL//2, r*CELL+CELL//2, CELL//2-6, P_COLORS[color], P_DARK[color], 3)
-
-    draw_circle(draw, 5*CELL+CELL//2, 5*CELL+CELL//2, CELL//2-2, (255,255,200), (100,80,0), 3)
+            draw_circle(draw, c*CELL+CELL//2, r*CELL+CELL//2, CELL//2-7, P_COLORS[color], P_DARK[color], 3)
 
     if players:
         slot = {}
@@ -72,17 +81,16 @@ def draw_board(players=None, dice=0, msg=""):
                 idx=pos-1
                 if 0<=idx<len(PATH):
                     slot.setdefault(idx,[]).append(p["color"])
-        offsets=[(-8,-8),(8,-8),(-8,8),(8,8)]
+        offsets=[(-9,-9),(9,-9),(-9,9),(9,9)]
         for idx,cols in slot.items():
             c,r=PATH[idx]
             cx,cy=c*CELL+CELL//2, r*CELL+CELL//2
             for k,col in enumerate(cols[:4]):
                 ox,oy=offsets[k] if len(cols)>1 else (0,0)
-                draw_circle(draw, cx+ox, cy+oy, 10 if len(cols)>1 else 14, P_COLORS[col], P_DARK[col], 3)
+                draw_circle(draw, cx+ox, cy+oy, 11 if len(cols)>1 else 15, P_COLORS[col], P_DARK[col], 3)
 
-    if dice>0 or msg:
-        draw.rectangle([0, SIZE, SIZE, SIZE+50], fill=(180,145,100))
-        draw.text((10, SIZE+10), f"🎲 تاس: {dice}   {msg}", fill=(40,30,20))
+    draw.rectangle([0,SIZE,SIZE,SIZE+50], fill=(180,145,100))
+    if dice>0: draw.text((10,SIZE+15), f"تاس: {dice}   {msg}", fill=(40,30,20))
 
     buf=io.BytesIO()
     img.save(buf, format="PNG")
@@ -106,11 +114,11 @@ def do_move(game, uid, idx):
     p=game["players"][uid]; color=p["color"]; pos=p["pieces"][idx]; dice=game["dice"]
     e=COLORS[color][0]; msg=""
     if pos==-1:
-        p["pieces"][idx]=START_IDX[color]+1
+        p["pieces"][idx]=START_POS[color]
         msg=f"{e} مهره {idx+1} وارد بازی شد!"
     else:
         new=pos+dice
-        if new>=52:
+        if new>len(PATH):
             p["pieces"][idx]=100+idx
             msg=f"{e} مهره {idx+1} به خانه رسید! 🏆"
         else:
@@ -216,7 +224,7 @@ async def btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         idx=int(d[3:]); msg=do_move(g,user.id,idx)
         w=check_winner(g)
         if w:
-            wp=g["players"][w]; we=COLORS[wp["color"]][0]
+            wp=g["players"][w]
             img=draw_board(g["players"],g["dice"],"برنده!")
             await q.message.reply_photo(photo=img, caption=f"{msg}\n\n🏆 *{wp['name']} برنده شد!* 🏆", parse_mode="Markdown")
             await q.delete_message(); del games[cid]; return
@@ -243,3 +251,5 @@ def main():
 
 if __name__=="__main__":
     main()
+ENDOFFILE
+echo "done"
